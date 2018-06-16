@@ -1,5 +1,3 @@
-# bgp-blind-data-attacks
+# ospf-remote-false-adjacency-attack
 
-Code based on [this thesis](https://calhoun.nps.edu/handle/10945/52961)
-
-Migrating configuration and tests from GNS3 to mininet
+Code based on this [paper](theory.stanford.edu/~dabo/papers/ospf.pdf)
