@@ -23,7 +23,7 @@ ROUTERS = 4
 OSPF_CONVERGENCE_TIME = 100
 CAPTURING_WINDOW = 120
 
-HUB_NAME = 'hub'
+SWITCH_NAME = 'switch'
 ATTACKER_NAME = 'atk1'
 TEST_HOST_NAME = 'testhost'
 
@@ -84,25 +84,42 @@ class SimpleTopo(Topo):
 			router = self.addSwitch('R%d' % (i+1))
 			routers.append(router)
 
-
-		# adding hosts to routers
 		hosts = []
 
-		router = 'R1'
 		hostname = 'h5-1'
 		host = self.addNode(hostname)
 		hosts.append(host)
-		self.addLink(router, host)
 
-		router = 'R4'
 		hostname = 'h4-1'
 		host = self.addNode(hostname)
 		hosts.append(host)
-		self.addLink(router, host)
+
+		hostname = ATTACKER_NAME
+		host = self.addNode(hostname)
+		hosts.append(host)
+
+		# adding hub5
+		switch_name = SWITCH_NAME + '5'
+		self.addSwitch(switch_name, cls=OVSSwitch)
+		self.addLink(switch_name, 'R1')
+		self.addLink(switch_name, 'h5-1')
+
+		# adding hub1
+		switch_name = SWITCH_NAME + '1'
+		self.addSwitch(switch_name, cls=OVSSwitch)
+		self.addLink(switch_name, 'R1')
+		self.addLink(switch_name, 'R2')
 
 		# adding links between routers
-		for i in xrange(num_routers-1):
-			self.addLink('R%d' % (i+1), 'R%d' % (i+2))
+		self.addLink('R2', 'R3')
+		self.addLink('R3', 'R4')
+
+		# adding hub4
+		switch_name = SWITCH_NAME + '4'
+		self.addSwitch(switch_name, cls=OVSSwitch)
+		self.addLink(switch_name, 'R4')
+		self.addLink(switch_name, 'h4-1')
+		self.addLink(switch_name, ATTACKER_NAME)
 
 		"""
 		# adding attacker to topology
@@ -112,28 +129,31 @@ class SimpleTopo(Topo):
 
 		"""
 		for i in xrange(2):
-			hub_name = HUB_NAME + str(i+1)
+			switch_name = SWITCH_NAME + str(i+1)
 			host_name = TEST_HOST_NAME + str(i+1)
 
 			# adding bridge between R1 and R2
-			self.addSwitch(hub_name, cls=OVSSwitch)
+			self.addSwitch(switch_name, cls=OVSSwitch)
 
-			self.addLink(hub_name, 'R%s' % (i+1))
-			self.addLink(hub_name, 'R%s' % (i+2))
+			self.addLink(switch_name, 'R%s' % (i+1))
+			self.addLink(switch_name, 'R%s' % (i+2))
 
 			# adding test host on bridge
 			test_host_node = self.addNode(host_name)
 			hosts.append(test_host_node)
 
-			self.addLink(hub_name, host_name)
+			self.addLink(switch_name, host_name)
 
-			self.addLink(hub_name, ATTACKER_NAME)
+			self.addLink(switch_name, ATTACKER_NAME)
 		"""
 
 		return
 
 
 def getIP(hostname):
+	if hostname == ATTACKER_NAME:
+		return '10.0.4.66/24'
+
 	subnet, idx = hostname.replace('h', '').split('-')
 
 	ip = '10.0.%s.%s/24' % (subnet, idx)
@@ -142,6 +162,9 @@ def getIP(hostname):
 
 
 def getGateway(hostname):
+	if hostname == ATTACKER_NAME:
+		return '10.0.4.254'
+
 	subnet, idx = hostname.replace('h', '').split('-')
 
 	gw = '10.0.%s.254' % (subnet)
@@ -192,15 +215,15 @@ def main():
 		host.cmd("ifconfig %s-eth0 %s" % (host.name, getIP(host.name)))
 		host.cmd("route add default gw %s" % (getGateway(host.name)))
 
-		host.cmd("tcpdump -i %s-eth0 -w /tmp/%s_tcpdump.cap &" % (host.name, host.name))
-
-	server_host = 'h4-1'
-	log("Starting web server on %s" % server_host, 'yellow')
-	startWebserver(net, server_host, "Web server on %s" % server_host)
+		if host.name != ATTACKER_NAME:
+			host.cmd("tcpdump -i %s-eth0 -w /tmp/%s_tcpdump.cap &" % (host.name, host.name))
+			
+			log("Starting web server on %s" % host.name, 'yellow')
+			startWebserver(net, host.name, "Web server on %s" % host.name)
 
 	# CONFIGURING ROUTERS
 	for router in net.switches:
-		if HUB_NAME not in router.name:
+		if SWITCH_NAME not in router.name:
 			router.cmd("sysctl -w net.ipv4.ip_forward=1")
 			router.waitOutput()
 
@@ -208,7 +231,7 @@ def main():
 	sleep(args.sleep)
 
 	for router in net.switches:
-		if HUB_NAME not in router.name:
+		if SWITCH_NAME not in router.name:
 			router.cmd("/usr/lib/quagga/zebra -f conf/zebra-%s.conf -d -i /tmp/zebra-%s.pid > logs/%s-zebra-stdout 2>&1" % (router.name, router.name, router.name))
 			router.waitOutput()
 			router.cmd("/usr/lib/quagga/ospfd -f conf/ospfd-%s.conf -d -i /tmp/ospf-%s.pid > logs/%s-ospfd-stdout 2>&1" % (router.name, router.name, router.name), shell=True)
