@@ -19,8 +19,8 @@ from argparse import ArgumentParser
 
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
-ROUTERS = 2
-OSPF_CONVERGENCE_TIME = 40
+ROUTERS = 4
+OSPF_CONVERGENCE_TIME = 100
 CAPTURING_WINDOW = 120
 
 HUB_NAME = 'hub'
@@ -89,13 +89,13 @@ class SimpleTopo(Topo):
 		hosts = []
 
 		router = 'R1'
-		hostname = 'h1-1'
+		hostname = 'h5-1'
 		host = self.addNode(hostname)
 		hosts.append(host)
 		self.addLink(router, host)
 
-		router = 'R2'
-		hostname = 'h2-1'
+		router = 'R4'
+		hostname = 'h4-1'
 		host = self.addNode(hostname)
 		hosts.append(host)
 		self.addLink(router, host)
@@ -151,10 +151,7 @@ def getGateway(hostname):
 
 def startWebserver(net, hostname, text="Default web server"):
 	host = net.getNodeByName(hostname)
-	#return host.popen("python webserver.py --text '%s'" % text, shell=True)
-	host.popen("python webserver.py --text '%s'" % text, shell=True)
-
-	host.cmd("netstat -nlp > /tmp/%s_netstat &" % hostname)
+	return host.popen("python webserver.py --text '%s'" % text, shell=True)
 
 
 def startPOXHub():
@@ -179,11 +176,11 @@ def launch_attack(attacker_host, choise):
 
 def main():
 	os.system("rm -f /tmp/R*.log /tmp/ospf-R?.pid /tmp/zebra-R?.pid 2> /dev/null")
-	os.system("rm -r logs/*stdout /tmp/hub.log /tmp/attacker_attacks.log 2> /dev/null")
+	os.system("rm -r logs/*stdout /tmp/h*tcpdump.cap 2> /dev/null")
 	os.system("mn -c > /dev/null 2>&1")
 	os.system("killall -9 zebra ospfd > /dev/null 2>&1")
 	os.system('pgrep -f webserver.py | xargs kill -9')
-
+	
 	#startPOXHub()
 
 	net = Mininet(topo=SimpleTopo(), switch=Router)
@@ -197,7 +194,7 @@ def main():
 
 		host.cmd("tcpdump -i %s-eth0 -w /tmp/%s_tcpdump.cap &" % (host.name, host.name))
 
-	server_host = 'h2-1'
+	server_host = 'h4-1'
 	log("Starting web server on %s" % server_host, 'yellow')
 	startWebserver(net, server_host, "Web server on %s" % server_host)
 
@@ -221,7 +218,7 @@ def main():
 	log("Waiting for OSPF convergence (estimated %s)..." % \
 		((datetime.datetime.now()+datetime.timedelta(0,OSPF_CONVERGENCE_TIME)).strftime("%H:%M:%S")), 'cyan')
 	sleep(OSPF_CONVERGENCE_TIME)
-
+	
 	"""
 	choise = -1
 
