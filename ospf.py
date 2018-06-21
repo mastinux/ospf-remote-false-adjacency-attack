@@ -17,11 +17,14 @@ from time import sleep, time
 from multiprocessing import Process
 from argparse import ArgumentParser
 
+POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
+
 ROUTERS = 4
 OSPF_CONVERGENCE_TIME = 60
-CAPTURING_WINDOW = 120
+CAPTURING_WINDOW = 90
 
 SWITCH_NAME = 'switch'
+HUB_NAME = 'hub'
 ATTACKER_NAME = 'atk1'
 
 setLogLevel('info')
@@ -63,13 +66,7 @@ class Router(Switch):
 
 
 class SimpleTopo(Topo):
-	"""
-	The topology is a simple straight-line topology
-	between R1 --- R2 --- R3 --- R4.
-	The links R2-R3 and R3-R4 are point-to-point links.
-	Between R1 and R2 there is a LAN.
-	R4 has a LAN attached.
-	"""
+
 	def __init__(self):
 		# Add default members to class.
 		super(SimpleTopo, self ).__init__()
@@ -106,25 +103,29 @@ class SimpleTopo(Topo):
 		self.addSwitch(switch_name, cls=OVSSwitch)
 		self.addLink(switch_name, 'R1')
 		self.addLink(switch_name, 'R2')
-		#self.addLink(switch_name, ATTACKER_NAME)
 
 		# adding links between routers
 		self.addLink('R1', 'R3')
-		self.addLink('R3', 'R4')
+
+		# adding switch3
+		hub_name = HUB_NAME + '3'
+		self.addSwitch(hub_name, cls=OVSSwitch)
+		self.addLink(hub_name, 'R3')
+		self.addLink(hub_name, 'R4')
+		self.addLink(hub_name, ATTACKER_NAME)
 
 		# adding switch4
 		switch_name = SWITCH_NAME + '4'
 		self.addSwitch(switch_name, cls=OVSSwitch)
 		self.addLink(switch_name, 'R4')
 		self.addLink(switch_name, 'h4-1')
-		self.addLink(switch_name, ATTACKER_NAME)
 
 		return
 
 
 def getIP(hostname):
 	if hostname == ATTACKER_NAME:
-		return '10.0.4.66/24'
+		return '10.0.3.66/24'
 
 	subnet, idx = hostname.replace('h', '').split('-')
 
@@ -135,7 +136,7 @@ def getIP(hostname):
 
 def getGateway(hostname):
 	if hostname == ATTACKER_NAME:
-		return '10.0.4.254'
+		return '10.0.3.1'
 
 	subnet, idx = hostname.replace('h', '').split('-')
 
@@ -147,6 +148,16 @@ def getGateway(hostname):
 def startWebserver(net, hostname, text="Default web server"):
 	host = net.getNodeByName(hostname)
 	return host.popen("python webserver.py --text '%s'" % text, shell=True)
+
+
+def startPOXHub():
+	log("Starting POX RemoteController")
+	os.system("python %s --verbose forwarding.hub > /tmp/hub.log 2>&1 &" % POX)
+
+
+def stopPOXHub():
+	log("Stopping POX RemoteController")
+	os.system('pgrep -f pox.py | xargs kill -9')
 
 
 def launch_attack(attacker_host):
@@ -166,7 +177,10 @@ def main():
 	os.system("killall -9 zebra ospfd > /dev/null 2>&1")
 	os.system('pgrep -f webserver.py | xargs kill -9')
 
+	startPOXHub()
+
 	net = Mininet(topo=SimpleTopo(), switch=Router)
+	net.addController(name='poxController', controller=RemoteController, ip='127.0.0.1', port=6633)
 	net.start()
 
 	attacker_host = None
@@ -175,7 +189,6 @@ def main():
 	for host in net.hosts:
 		host.cmd("ifconfig %s-eth0 %s" % (host.name, getIP(host.name)))
 		host.cmd("route add default gw %s" % (getGateway(host.name)))
-
 		host.cmd("tcpdump -i %s-eth0 -w /tmp/%s_tcpdump.cap &" % (host.name, host.name))
 
 		if host.name == ATTACKER_NAME:
@@ -187,7 +200,7 @@ def main():
 
 	# CONFIGURING ROUTERS
 	for router in net.switches:
-		if SWITCH_NAME not in router.name:
+		if SWITCH_NAME not in router.name and HUB_NAME not in router.name:
 			router.cmd("sysctl -w net.ipv4.ip_forward=1")
 			router.waitOutput()
 
@@ -195,14 +208,15 @@ def main():
 	sleep(args.sleep)
 
 	for router in net.switches:
-		if SWITCH_NAME not in router.name:
+		if SWITCH_NAME not in router.name and HUB_NAME not in router.name:
 			router.cmd("/usr/lib/quagga/zebra -f conf/zebra-%s.conf -d -i /tmp/zebra-%s.pid > logs/%s-zebra-stdout 2>&1" % (router.name, router.name, router.name))
 			router.waitOutput()
 			router.cmd("/usr/lib/quagga/ospfd -f conf/ospfd-%s.conf -d -i /tmp/ospf-%s.pid > logs/%s-ospfd-stdout 2>&1" % (router.name, router.name, router.name), shell=True)
 			router.waitOutput()
 			log("Starting zebra and ospfd on %s" % router.name)
 
-			router.cmd("tcpdump -i any -w /tmp/%s_tcpdump.cap 2>&1 > /tmp/%s_tcpdump.log &" % (router.name, router.name))
+			router.cmd("tcpdump -i %s-eth1 -w /tmp/%s-eth1_tcpdump.cap 2>&1 > /tmp/%s-eth1_tcpdump.log &" % (router.name, router.name, router.name))
+			router.cmd("tcpdump -i %s-eth2 -w /tmp/%s-eth2_tcpdump.cap 2>&1 > /tmp/%s-eth2_tcpdump.log &" % (router.name, router.name, router.name))
 
 	#"""
 	log("Waiting for OSPF convergence (estimated %s)..." % \
@@ -218,7 +232,7 @@ def main():
 	sleep(CAPTURING_WINDOW)
 	#"""
 
-	os.system("./ping.sh")
+	#os.system("./ping.sh")
 	
 	#CLI(net)
 	net.stop()

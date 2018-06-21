@@ -21,19 +21,19 @@ HELLO_DESTINATION_ADDRESS = '224.0.0.5'
 HELLO_INTERVAL = 10
 DEAD_INTERVAL = 40
 TTL = 64
+OUTPUT_INTERFACE = 'atk1-eth0'
 
 eight_bit_space = [1L, 2L, 4L, 8L, 16L, 32L, 64L, 128L]
-
-def print_long_line():
-	print '#################################################################################'
 
 
 def log(s, col="green"):
 	print T.colored(s, col)
 
 
-def send_hello_packet(srcIP, dstIP):
-	ip_packet = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
+def send_hello_packet(srcMAC, dstMAC, srcIP, dstIP):
+	eth_header = Ether(src=srcMAC, dst=dstMAC)
+
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
 
 	ospf_header = OSPF_Hdr(\
 		src='2.2.2.3')
@@ -47,18 +47,16 @@ def send_hello_packet(srcIP, dstIP):
 		#backup='10.0.1.2',\
 		options=2L)
 
-	ospf_hello_packet = ip_packet/ospf_header/ospf_payload
+	frame = eth_header/ip_header/ospf_header/ospf_payload
+	frame.show()
 
-	ospf_hello_packet.show()
-	print_long_line()
-
-	print 'sending hello message at %s' % (datetime.datetime.now().strftime("%H:%M:%S"))
-
-	send(ospf_hello_packet)
+	sendp(frame, iface=OUTPUT_INTERFACE)
 
 
-def send_empty_dbd_messages(srcIP, dstIP, n, interval):
-	ip_packet = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
+def send_empty_dbd_messages(srcMAC, dstMAC, srcIP, dstIP, n, interval):
+	eth_header = Ether(src=srcMAC, dst=dstMAC)
+
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
 
 	seqNum = randint(0, 2147483648)
 
@@ -70,23 +68,23 @@ def send_empty_dbd_messages(srcIP, dstIP, n, interval):
 		dbdescr=7L,\
 		options=2L)
 
-	ospf_dbd_message_packet = ip_packet/ospf_header/ospf_payload
-
-	ospf_dbd_message_packet.show()
-	print_long_line()
+	frame = eth_header/ip_header/ospf_header/ospf_payload
+	frame.show()
 
 	for i in xrange(0, n):
 		print 'sending %d-th dbd message with seqNum %d at %s' % (i+1, seqNum + i, datetime.datetime.now().strftime("%H:%M:%S"))
 
 		sleep(interval)
 
-		ospf_dbd_message_packet.payload.payload.ddseq = seqNum + i
+		frame.payload.payload.payload.ddseq = seqNum + i
 
-		send(ospf_dbd_message_packet)
+		sendp(frame, iface=OUTPUT_INTERFACE)
 
 
-def send_hello_messages(srcIP, dstIP, interval):
-	ip_packet = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
+def send_hello_messages(srcMAC, dstMAC, srcIP, dstIP, interval):
+	eth_header = Ether(src=srcMAC, dst=dstMAC)
+
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
 
 	ospf_header = OSPF_Hdr(\
 		src='2.2.2.3')
@@ -100,10 +98,8 @@ def send_hello_messages(srcIP, dstIP, interval):
 		#backup='10.0.1.2',\
 		options=2L)
 
-	dbd_message_packet = ip_packet/ospf_header/ospf_payload
-
-	dbd_message_packet.show()
-	print_long_line()
+	frame = eth_header/ip_header/ospf_header/ospf_payload
+	frame.show()
 
 	i = 0
 
@@ -112,17 +108,67 @@ def send_hello_messages(srcIP, dstIP, interval):
 
 		sleep(interval)
 
-		send(dbd_message_packet)
+		sendp(frame, iface=OUTPUT_INTERFACE)
+
+
+def retrieve_mac_address(iface, ip_address):
+	p = Popen(('sudo', 'tcpdump', '-i', iface, '-lnSe'), stdout=PIPE)
+
+	mac_address = None
+
+	for row in iter(p.stdout.readline, b''):
+		mac_address = extract_mac_address(row, ip_address)
+
+		if mac_address != None:
+			p.kill()
+
+			break
+
+	return mac_address
+
+
+def extract_mac_address(row, ip_address):
+	values = row.split(' ')
+
+	if ip_address in values[9]:
+		return values[1].replace(',','')
+
+	if ip_address in values[11]:
+		return values[3].replace(',','')
+
+	return None
+
+
+def retrieve_atk1_mac_address(iface):
+	p = Popen(('ifconfig'), stdout=PIPE)
+
+	for row in iter(p.stdout.readline, b''):
+		if iface in row:
+			values = row.split(' ')
+
+			p.kill()
+
+			return values[5]
+
+	p.kill()
+
+	return None
 
 
 def main():
-	#send_hello_packet(SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
-	send_hello_packet(SOURCE_ADDRESS, DESTINATION_ADDRESS)
+	src_mac_address = retrieve_atk1_mac_address('atk1-eth0')
+	assert src_mac_address is not None
+	print 'source MAC address', src_mac_address
 
-	send_empty_dbd_messages(SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
+	dst_mac_address = retrieve_mac_address('atk1-eth0', '10.0.3.1')
+	assert dst_mac_address is not None
+	print 'destination MAC address', dst_mac_address
 
-	#send_hello_messages(SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, 30)
-	send_hello_messages(SOURCE_ADDRESS, DESTINATION_ADDRESS, 30)
+	send_hello_packet(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS)
+
+	send_empty_dbd_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
+
+	send_hello_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 30)
 
 
 if __name__ == "__main__":
