@@ -168,7 +168,7 @@ def main():
 
 	send_empty_dbd_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
 
-	send_hello_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 30)
+	send_hello_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
 
 
 if __name__ == "__main__":
