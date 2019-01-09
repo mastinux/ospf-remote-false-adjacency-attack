@@ -44,11 +44,11 @@ Code based on this [paper](theory.stanford.edu/~dabo/papers/ospf.pdf)
 
 ## Contrib setup
 
-- download [bgp.py](https://github.com/levigross/Scapy/blob/master/scapy/contrib/bgp.py)
+- download [ospf.py](https://github.com/levigross/Scapy/blob/master/scapy/contrib/ospf.py)
 
 - `mkdir /usr/lib/python2.7/dist-packages/scapy/contrib`
 
-- `cp bgp.py /usr/lib/python2.7/dist-packages/scapy/contrib`
+- `cp ospf.py /usr/lib/python2.7/dist-packages/scapy/contrib`
 
 - `touch /usr/lib/python2.7/dist-packages/scapy/contrib/__init__.py`
 
@@ -79,3 +79,5 @@ show configured ospf interfaces
 *TODO*:
 
 - create a base class to init quagga
+
+- check if ospf.py and bgp.py used are the latest version

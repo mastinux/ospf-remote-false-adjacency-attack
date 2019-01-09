@@ -21,12 +21,13 @@ from utils import log, log2
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
 ROUTERS = 4
-OSPF_CONVERGENCE_TIME = 60 # value get waiting for all hosts to reach web servers using reachability.sh
-CAPTURING_WINDOW = 90
+OSPF_CONVERGENCE_TIME = 60 # value get waiting for all hosts to reach web servers using ./reachability.sh
+CAPTURING_WINDOW = 60
 
 SWITCH_NAME = 'switch'
 HUB_NAME = 'hub'
-ATTACKER_NAME = 'atk1'
+LOCAL_ATTACKER_NAME = 'latk'
+REMOTE_ATTACKER_NAME = 'ratk'
 
 QUAGGA_STATE_DIR = '/var/run/quagga-1.2.4'
 
@@ -86,7 +87,7 @@ class SimpleTopo(Topo):
 		host = self.addNode(hostname)
 		hosts.append(host)
 
-		hostname = ATTACKER_NAME
+		hostname = REMOTE_ATTACKER_NAME
 		host = self.addNode(hostname)
 		hosts.append(host)
 
@@ -110,7 +111,7 @@ class SimpleTopo(Topo):
 		self.addSwitch(hub_name, cls=OVSSwitch)
 		self.addLink(hub_name, 'R3')
 		self.addLink(hub_name, 'R4')
-		self.addLink(hub_name, ATTACKER_NAME)
+		self.addLink(hub_name, REMOTE_ATTACKER_NAME)
 
 		# adding switch4
 		switch_name = SWITCH_NAME + '4'
@@ -118,12 +119,22 @@ class SimpleTopo(Topo):
 		self.addLink(switch_name, 'R4')
 		self.addLink(switch_name, 'h4-1')
 
+		hostname = LOCAL_ATTACKER_NAME
+		host = self.addNode(hostname)
+		hosts.append(host)
+
+		switch_name = SWITCH_NAME + '1'
+		self.addLink(switch_name, LOCAL_ATTACKER_NAME)
+
 		return
 
 
 def getIP(hostname):
-	if hostname == ATTACKER_NAME:
+	if hostname == REMOTE_ATTACKER_NAME:
 		return '10.0.3.66/24'
+
+	if hostname == LOCAL_ATTACKER_NAME:
+		return '10.0.1.66/24'
 
 	subnet, idx = hostname.replace('h', '').split('-')
 
@@ -133,8 +144,11 @@ def getIP(hostname):
 
 
 def getGateway(hostname):
-	if hostname == ATTACKER_NAME:
+	if hostname == REMOTE_ATTACKER_NAME:
 		return '10.0.3.1'
+
+	if hostname == LOCAL_ATTACKER_NAME:
+		return '10.0.1.1'
 
 	subnet, idx = hostname.replace('h', '').split('-')
 
@@ -160,13 +174,19 @@ def stopPOXHub():
 	os.system('pgrep -f pox.py | xargs kill -9')
 
 
-def launch_attack(attacker_host):
+def launch_attack(attacker_host, atk1_mac_address, r_mac_address):
 	log("launching attack", 'red')
 
-	attacker_host.popen("python attack.py > /tmp/attack.log 2>&1", shell=True)
+	iface = None
+
+	for i in attacker_host.intfList():
+		iface = i.name
+
+	attacker_host.popen("python attack.py %s %s %s > /tmp/attack.log 2>&1" % (iface, atk1_mac_address, r_mac_address), shell=True)
 	os.system('lxterminal -e "/bin/bash -c \'tail -f /tmp/attack.log\'" > /dev/null 2>&1 &')
 
 	log("attack launched", 'red')
+	log("check opened terminals", 'red')
 
 
 def init_quagga_state_dir():
@@ -202,20 +222,27 @@ def main():
 	net.addController(name='poxController', controller=RemoteController, ip='127.0.0.1', port=6633)
 	net.start()
 
-	attacker_host = None
+	local_attacker_host = None
+	remote_attacker_host = None
 
 	# CONFIGURING HOSTS
 	for host in net.hosts:
 		host.cmd("ifconfig %s-eth0 %s" % (host.name, getIP(host.name)))
 		host.cmd("route add default gw %s" % (getGateway(host.name)))
-		host.cmd("tcpdump -i %s-eth0 -w /tmp/%s-tcpdump.cap &" % (host.name, host.name))
+		host.cmd("tcpdump -i %s-eth0 -w /tmp/%s-tcpdump.cap not arp &" % (host.name, host.name))
 
-		if host.name == ATTACKER_NAME:
-			attacker_host = host
+		if host.name == LOCAL_ATTACKER_NAME:
+			local_attacker_host = host
+			continue
+		elif host.name == REMOTE_ATTACKER_NAME:
+			remote_attacker_host = host
 			continue
 		else:
 			log("Starting web server on %s" % host.name, 'yellow')
 			startWebserver(net, host.name, "Web server on %s" % host.name)
+
+	local_atk1_mac_address = local_attacker_host.MAC()
+	remote_atk1_mac_address = remote_attacker_host.MAC()
 
 	# CONFIGURING ROUTERS
 	for router in net.switches:
@@ -225,6 +252,9 @@ def main():
 
 	log("Waiting %d seconds for sysctl changes to take effect..." % args.sleep, col='cyan')
 	sleep(args.sleep)
+
+	r1_eth1_mac_address = None
+	r3_eth2_mac_address = None
 
 	for router in net.switches:
 		if SWITCH_NAME not in router.name and HUB_NAME not in router.name:
@@ -236,25 +266,37 @@ def main():
 			router.waitOutput()
 			log("Starting zebra and ospfd on %s" % router.name)
 
-			router.cmd("tcpdump -i %s-eth1 -w /tmp/%s-eth1-tcpdump.cap 2>&1 > /tmp/%s-eth1-tcpdump.log &" % \
+			router.cmd("tcpdump -i %s-eth1 -w /tmp/%s-eth1-tcpdump.cap not arp 2>&1 > /tmp/%s-eth1-tcpdump.log &" % \
 				(router.name, router.name, router.name))
-			router.cmd("tcpdump -i %s-eth2 -w /tmp/%s-eth2-tcpdump.cap 2>&1 > /tmp/%s-eth2-tcpdump.log &" % \
+			router.cmd("tcpdump -i %s-eth2 -w /tmp/%s-eth2-tcpdump.cap not arp 2>&1 > /tmp/%s-eth2-tcpdump.log &" % \
 				(router.name, router.name, router.name))
+
+		if router.name == 'R1':
+			for i in router.intfList():
+				if i.name == 'R1-eth1':
+					r1_eth1_mac_address = i.MAC()
+
+		if router.name == 'R3':
+			for i in router.intfList():
+				if i.name == 'R3-eth2':
+					r3_eth2_mac_address = i.MAC()
 
 	log("Waiting for OSPF convergence (estimated %s)..." % \
 		((datetime.datetime.now()+datetime.timedelta(0,OSPF_CONVERGENCE_TIME)).strftime("%H:%M:%S")), 'cyan')
 	sleep(OSPF_CONVERGENCE_TIME)
+
+	launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
+	#launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
 	
-	# TODO launch attack
-	# launch_attack(attacker_host)
-	
-	"""
+	#"""
 	log("Collecting data for %s seconds (estimated %s)..." % \
 		(CAPTURING_WINDOW, (datetime.datetime.now()+datetime.timedelta(0,CAPTURING_WINDOW)).strftime("%H:%M:%S")), 'cyan')
 	sleep(CAPTURING_WINDOW)
 	#"""
 	
 	CLI(net)
+	#raw_input('press ENTER to stop mininet...')
+
 	net.stop()
 
 	stopPOXHub()
@@ -263,6 +305,11 @@ def main():
 	os.system('pgrep bgpd | xargs kill -9')
 	os.system('pgrep pox | xargs kill -9')
 	os.system('pgrep -f webserver.py | xargs kill -9')
+
+	#os.system('sudo wireshark /tmp/atk1-tcpdump.cap -Y \'not ipv6\' &')
+	#os.system('sudo wireshark /tmp/R3-eth2-tcpdump.cap -Y \'not ipv6\' &')
+	#os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' &')
+	os.system('sudo wireshark /tmp/R1-eth1-tcpdump.cap -Y \'not ipv6\' &')
 
 
 if __name__ == "__main__":
