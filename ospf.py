@@ -25,7 +25,6 @@ OSPF_CONVERGENCE_TIME = 60 # value get waiting for all hosts to reach web server
 CAPTURING_WINDOW = 60
 
 SWITCH_NAME = 'switch'
-HUB_NAME = 'hub'
 LOCAL_ATTACKER_NAME = 'latk'
 REMOTE_ATTACKER_NAME = 'ratk'
 
@@ -107,11 +106,11 @@ class SimpleTopo(Topo):
 		self.addLink('R1', 'R3')
 
 		# adding switch3
-		hub_name = HUB_NAME + '3'
-		self.addSwitch(hub_name, cls=OVSSwitch)
-		self.addLink(hub_name, 'R3')
-		self.addLink(hub_name, 'R4')
-		self.addLink(hub_name, REMOTE_ATTACKER_NAME)
+		switch_name = SWITCH_NAME + '3'
+		self.addSwitch(switch_name, cls=OVSSwitch)
+		self.addLink(switch_name, 'R3')
+		self.addLink(switch_name, 'R4')
+		self.addLink(switch_name, REMOTE_ATTACKER_NAME)
 
 		# adding switch4
 		switch_name = SWITCH_NAME + '4'
@@ -246,7 +245,7 @@ def main():
 
 	# CONFIGURING ROUTERS
 	for router in net.switches:
-		if SWITCH_NAME not in router.name and HUB_NAME not in router.name:
+		if SWITCH_NAME not in router.name:
 			router.cmd("sysctl -w net.ipv4.ip_forward=1")
 			router.waitOutput()
 
@@ -257,7 +256,7 @@ def main():
 	r3_eth2_mac_address = None
 
 	for router in net.switches:
-		if SWITCH_NAME not in router.name and HUB_NAME not in router.name:
+		if SWITCH_NAME not in router.name:
 			router.cmd("~/quagga-1.2.4/zebra/zebra -f conf/zebra-%s.conf -d -i /tmp/zebra-%s.pid > logs/%s-zebra-stdout 2>&1" % \
 				(router.name, router.name, router.name))
 			router.waitOutput()
@@ -281,14 +280,16 @@ def main():
 				if i.name == 'R3-eth2':
 					r3_eth2_mac_address = i.MAC()
 
+	"""
 	log("Waiting for OSPF convergence (estimated %s)..." % \
 		((datetime.datetime.now()+datetime.timedelta(0,OSPF_CONVERGENCE_TIME)).strftime("%H:%M:%S")), 'cyan')
 	sleep(OSPF_CONVERGENCE_TIME)
+	#"""
 
 	launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
 	#launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
 	
-	#"""
+	"""
 	log("Collecting data for %s seconds (estimated %s)..." % \
 		(CAPTURING_WINDOW, (datetime.datetime.now()+datetime.timedelta(0,CAPTURING_WINDOW)).strftime("%H:%M:%S")), 'cyan')
 	sleep(CAPTURING_WINDOW)
