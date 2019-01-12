@@ -18,11 +18,17 @@ from multiprocessing import Process
 from argparse import ArgumentParser
 from utils import log, log2
 
+REMOTE_ATTACK = 0
+
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
 ROUTERS = 4
 OSPF_CONVERGENCE_TIME = 60 # value get waiting for all hosts to reach web servers using ./reachability.sh
-CAPTURING_WINDOW = 60
+CAPTURING_WINDOW = 10 + 2 * 40 # waiting for 
+# 10 s between 2.2.2.3 Hello p. and 2.2.2.2 Hello p.
+# + 2 * <dead interval> timeout to observe R2 behavior
+
+# dirty Hello p. sent by 2.2.2.2 for 40 s (<dead interval>)
 
 SWITCH_NAME = 'switch'
 LOCAL_ATTACKER_NAME = 'latk'
@@ -280,22 +286,24 @@ def main():
 				if i.name == 'R3-eth2':
 					r3_eth2_mac_address = i.MAC()
 
-	"""
+	#"""
 	log("Waiting for OSPF convergence (estimated %s)..." % \
 		((datetime.datetime.now()+datetime.timedelta(0,OSPF_CONVERGENCE_TIME)).strftime("%H:%M:%S")), 'cyan')
 	sleep(OSPF_CONVERGENCE_TIME)
 	#"""
 
-	launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
-	#launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
+	if REMOTE_ATTACK != 1:
+		launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
+	else:
+		launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
 	
-	"""
+	#"""
 	log("Collecting data for %s seconds (estimated %s)..." % \
 		(CAPTURING_WINDOW, (datetime.datetime.now()+datetime.timedelta(0,CAPTURING_WINDOW)).strftime("%H:%M:%S")), 'cyan')
 	sleep(CAPTURING_WINDOW)
 	#"""
 	
-	CLI(net)
+	#CLI(net)
 	#raw_input('press ENTER to stop mininet...')
 
 	net.stop()
@@ -307,10 +315,12 @@ def main():
 	os.system('pgrep pox | xargs kill -9')
 	os.system('pgrep -f webserver.py | xargs kill -9')
 
-	#os.system('sudo wireshark /tmp/atk1-tcpdump.cap -Y \'not ipv6\' &')
-	#os.system('sudo wireshark /tmp/R3-eth2-tcpdump.cap -Y \'not ipv6\' &')
-	#os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' &')
-	os.system('sudo wireshark /tmp/R1-eth1-tcpdump.cap -Y \'not ipv6\' &')
+	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' &')
+
+	if REMOTE_ATTACK != 1:
+		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' &')
+	else:
+		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' &')
 
 
 if __name__ == "__main__":

