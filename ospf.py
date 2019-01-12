@@ -18,7 +18,7 @@ from multiprocessing import Process
 from argparse import ArgumentParser
 from utils import log, log2
 
-REMOTE_ATTACK = 0
+REMOTE_ATTACK = 1
 
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
@@ -179,7 +179,7 @@ def stopPOXHub():
 	os.system('pgrep -f pox.py | xargs kill -9')
 
 
-def launch_attack(attacker_host, atk1_mac_address, r_mac_address):
+def launch_attack(attacker_host, atk_mac_address, r_mac_address):
 	log("launching attack", 'red')
 
 	iface = None
@@ -187,8 +187,11 @@ def launch_attack(attacker_host, atk1_mac_address, r_mac_address):
 	for i in attacker_host.intfList():
 		iface = i.name
 
-	attacker_host.popen("python attack.py %s %s %s > /tmp/attack.log 2>&1" % (iface, atk1_mac_address, r_mac_address), shell=True)
+	attacker_host.popen("python attack.py %s %s %s %s > /tmp/attack.log 2>&1" % (REMOTE_ATTACK, iface, atk_mac_address, r_mac_address), shell=True)
 	os.system('lxterminal -e "/bin/bash -c \'tail -f /tmp/attack.log\'" > /dev/null 2>&1 &')
+
+	# TODO remote attack
+	# controlla dati inviati da ratk
 
 	log("attack launched", 'red')
 	log("check opened terminals", 'red')
@@ -292,10 +295,12 @@ def main():
 	sleep(OSPF_CONVERGENCE_TIME)
 	#"""
 
+	#"""
 	if REMOTE_ATTACK != 1:
 		launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
 	else:
 		launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
+	#"""
 	
 	#"""
 	log("Collecting data for %s seconds (estimated %s)..." % \

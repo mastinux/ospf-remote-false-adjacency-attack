@@ -58,6 +58,23 @@ Code based on this [paper](theory.stanford.edu/~dabo/papers/ospf.pdf)
 
 ---
 
+|attaccante||router vittima|
+|-|:-:|-|
+|| Hello(ID fantasma > ID vittima, neighbor=ID vittima) &rarr; ||
+|| &larr; DBD(I, M, MS, SN=y) ||
+|| DBD(I, M, MS, SN=x) &rarr; ||
+|| &larr; DBD(M, SN=x) ||
+|| DBD(M, MS, SN=x+1) &rarr; ||
+|| &larr; DBD(M, SN=x+1) ||
+||...||
+|| DBD(MS, SN=x+N) &rarr; |||
+
+L'attaccante dopo un numero ragionevole di DBD per rendere il router fantasma persistente nella RT del router vittima deve continuare a inviare Hello packet
+
+NB: l'attaccante non riceve mai i messaggi di risposta dal router vittima
+
+---
+
 show routing table
 
 `show ip ospf route`
