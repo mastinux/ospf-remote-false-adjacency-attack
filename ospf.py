@@ -249,6 +249,9 @@ def main():
 			log("Starting web server on %s" % host.name, 'yellow')
 			startWebserver(net, host.name, "Web server on %s" % host.name)
 
+		if host.name == 'h4-1':
+			host.cmd('ping 10.0.1.2 -i 10 2>&1> /tmp/h4-1-ping.log &')
+
 	local_atk1_mac_address = local_attacker_host.MAC()
 	remote_atk1_mac_address = remote_attacker_host.MAC()
 
@@ -326,6 +329,7 @@ def main():
 		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' &')
 	else:
 		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' &')
+		os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' &')
 
 
 if __name__ == "__main__":
