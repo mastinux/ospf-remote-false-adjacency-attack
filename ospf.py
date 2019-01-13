@@ -323,13 +323,13 @@ def main():
 	os.system('pgrep pox | xargs kill -9')
 	os.system('pgrep -f webserver.py | xargs kill -9')
 
-	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' &')
+	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
 	if REMOTE_ATTACK != 1:
-		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' &')
+		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 	else:
-		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' &')
-		os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' &')
+		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
+		os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
 
 if __name__ == "__main__":

