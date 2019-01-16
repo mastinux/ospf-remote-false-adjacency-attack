@@ -69,9 +69,11 @@ Code based on this [paper](theory.stanford.edu/~dabo/papers/ospf.pdf)
 ||...||
 || DBD(MS, SN=x+N) &rarr; |||
 
-L'attaccante dopo un numero ragionevole di DBD per rendere il router fantasma persistente nella RT del router vittima deve continuare a inviare Hello packet
+L'attaccante dopo un numero ragionevole di DBD per rendere il router fantasma persistente nella RT del router vittima deve continuare a inviare più Hello packet
 
 NB: l'attaccante non riceve mai i messaggi di risposta dal router vittima
+
+Status: il pacchetto dell'attaccante remoto (src='10.0.3.66', dst='10.0.1.2') non viene elaborato dal router vittima R2
 
 ---
 

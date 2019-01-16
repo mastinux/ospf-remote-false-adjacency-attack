@@ -23,12 +23,12 @@ REMOTE_ATTACK = 1
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
 ROUTERS = 4
-OSPF_CONVERGENCE_TIME = 60 # value get waiting for all hosts to reach web servers using ./reachability.sh
+# OSPF_CONVERGENCE_TIME set from waiting for all hosts 
+# to reach web servers using ./reachability.sh
+OSPF_CONVERGENCE_TIME = 60 
 CAPTURING_WINDOW = 10 + 2 * 40 # waiting for 
 # 10 s between 2.2.2.3 Hello p. and 2.2.2.2 Hello p.
-# + 2 * <dead interval> timeout to observe R2 behavior
-
-# dirty Hello p. sent by 2.2.2.2 for 40 s (<dead interval>)
+# + 2 * <dead interval> timeout to observe R2 victim router behavior
 
 SWITCH_NAME = 'switch'
 LOCAL_ATTACKER_NAME = 'latk'
@@ -190,9 +190,6 @@ def launch_attack(attacker_host, atk_mac_address, r_mac_address):
 	attacker_host.popen("python attack.py %s %s %s %s > /tmp/attack.log 2>&1" % (REMOTE_ATTACK, iface, atk_mac_address, r_mac_address), shell=True)
 	os.system('lxterminal -e "/bin/bash -c \'tail -f /tmp/attack.log\'" > /dev/null 2>&1 &')
 
-	# TODO remote attack
-	# controlla dati inviati da ratk
-
 	log("attack launched", 'red')
 	log("check opened terminals", 'red')
 
@@ -323,13 +320,12 @@ def main():
 	os.system('pgrep pox | xargs kill -9')
 	os.system('pgrep -f webserver.py | xargs kill -9')
 
-	#os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
+	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
 	if REMOTE_ATTACK != 1:
 		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 	else:
 		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
-		#os.system('sudo wireshark /tmp/R3-eth1-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
 
 if __name__ == "__main__":

