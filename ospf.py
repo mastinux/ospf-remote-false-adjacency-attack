@@ -3,8 +3,6 @@
 import sys
 import os
 import termcolor as T
-import time
-import datetime
 
 from mininet.topo import Topo
 from mininet.net import Mininet
@@ -13,12 +11,9 @@ from mininet.util import dumpNodeConnections, quietRun, moveIntf, waitListening
 from mininet.cli import CLI
 from mininet.node import Switch, OVSSwitch, Controller, RemoteController
 from subprocess import Popen, PIPE, check_output
-from time import sleep, time
 from multiprocessing import Process
 from argparse import ArgumentParser
 from utils import log, log2
-
-REMOTE_ATTACK = 1
 
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
@@ -179,7 +174,7 @@ def stopPOXHub():
 	os.system('pgrep -f pox.py | xargs kill -9')
 
 
-def launch_attack(attacker_host, atk_mac_address, r_mac_address):
+def launch_attack(remote_flag, attacker_host, atk_mac_address, r_mac_address):
 	log("launching attack", 'red')
 
 	iface = None
@@ -187,7 +182,7 @@ def launch_attack(attacker_host, atk_mac_address, r_mac_address):
 	for i in attacker_host.intfList():
 		iface = i.name
 
-	attacker_host.popen("python attack.py %s %s %s %s > /tmp/attack.log 2>&1" % (REMOTE_ATTACK, iface, atk_mac_address, r_mac_address), shell=True)
+	attacker_host.popen("python attack.py %s %s %s %s > /tmp/attack.log 2>&1" % (remote_flag, iface, atk_mac_address, r_mac_address), shell=True)
 	os.system('lxterminal -e "/bin/bash -c \'tail -f /tmp/attack.log\'" > /dev/null 2>&1 &')
 
 	log("attack launched", 'red')
@@ -246,8 +241,8 @@ def main():
 			log("Starting web server on %s" % host.name, 'yellow')
 			startWebserver(net, host.name, "Web server on %s" % host.name)
 
-		if host.name == 'h4-1':
-			host.cmd('ping 10.0.1.2 -i 10 2>&1> /tmp/h4-1-ping.log &')
+		#if host.name == 'h4-1':
+		#	host.cmd('ping 10.0.1.2 -i 10 2>&1> /tmp/h4-1-ping.log &')
 
 	local_atk1_mac_address = local_attacker_host.MAC()
 	remote_atk1_mac_address = remote_attacker_host.MAC()
@@ -258,8 +253,7 @@ def main():
 			router.cmd("sysctl -w net.ipv4.ip_forward=1")
 			router.waitOutput()
 
-	log("Waiting %d seconds for sysctl changes to take effect..." % args.sleep, col='cyan')
-	sleep(args.sleep)
+	log2('sysctl changes to take effect', args.sleep, 'cyan')
 
 	r1_eth1_mac_address = None
 	r3_eth2_mac_address = None
@@ -289,24 +283,21 @@ def main():
 				if i.name == 'R3-eth2':
 					r3_eth2_mac_address = i.MAC()
 
-	#"""
-	log("Waiting for OSPF convergence (estimated %s)..." % \
-		((datetime.datetime.now()+datetime.timedelta(0,OSPF_CONVERGENCE_TIME)).strftime("%H:%M:%S")), 'cyan')
-	sleep(OSPF_CONVERGENCE_TIME)
-	#"""
+	log2('OSPF convergence', OSPF_CONVERGENCE_TIME, 'cyan')
+
+	remote_flag = -1
+
+	while remote_flag < 0 or remote_flag > 1:
+		remote_flag = int(raw_input("Local (0) or Remote (1) attack? "))
 
 	#"""
-	if REMOTE_ATTACK != 1:
-		launch_attack(local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
+	if remote_flag == 0:
+		launch_attack(remote_flag, local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
 	else:
-		launch_attack(remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
+		launch_attack(remote_flag, remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
 	#"""
 	
-	#"""
-	log("Collecting data for %s seconds (estimated %s)..." % \
-		(CAPTURING_WINDOW, (datetime.datetime.now()+datetime.timedelta(0,CAPTURING_WINDOW)).strftime("%H:%M:%S")), 'cyan')
-	sleep(CAPTURING_WINDOW)
-	#"""
+	log2('Collecting data', CAPTURING_WINDOW, 'cyan')
 	
 	#CLI(net)
 	#raw_input('press ENTER to stop mininet...')
@@ -322,7 +313,7 @@ def main():
 
 	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
-	if REMOTE_ATTACK != 1:
+	if remote_flag == 0:
 		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 	else:
 		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
