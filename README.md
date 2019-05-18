@@ -67,22 +67,15 @@ Dopo questa fase deve continuare a inviare Hello packet a intervalli regolari.
 
 NB: l'attaccante non riceve mai i messaggi di risposta dal router vittima
 
----
+## Esecuzione dell'attacco
 
-## Utils
+Avviare la topologia
+	`# python ospf.py`
 
-show routing table
+Attendere la convergenza di OSPF in base alle indicazioni.
 
-`> show ip ospf route`
+Scegliere se lanciare l'attacco locale (`0`) o remoto (`1`).
 
-show LSA database
+Attendere che vengano raccolti i pacchetti interessanti per l'attacco.
 
-`> show ip ospf database`
-
-show neighbors
-
-`> show ip ospf neighbor`
-
-show configured ospf interfaces
-
-`> show ip ospf interface`
+Analizzare i pacchetti proposti da `wireshark`.
