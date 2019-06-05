@@ -18,8 +18,6 @@ from utils import log, log2
 POX = '%s/pox/pox.py' % os.environ[ 'HOME' ]
 
 ROUTERS = 4
-# OSPF_CONVERGENCE_TIME set from waiting for all hosts 
-# to reach web servers using ./reachability.sh
 OSPF_CONVERGENCE_TIME = 60 
 CAPTURING_WINDOW = 10 + 2 * 40 # waiting for 
 # 10 s between 2.2.2.3 Hello p. and 2.2.2.2 Hello p.
@@ -250,6 +248,11 @@ def main():
 	# CONFIGURING ROUTERS
 	for router in net.switches:
 		if SWITCH_NAME not in router.name:
+			# 0 = no RPF
+			# 1 = RPF strict mode
+			# 2 = RPF loose mode
+			router.cmd("sysctl -w net.ipv4.conf.all.rp_filter=2")
+
 			router.cmd("sysctl -w net.ipv4.ip_forward=1")
 			router.waitOutput()
 
@@ -285,22 +288,32 @@ def main():
 
 	log2('OSPF convergence', OSPF_CONVERGENCE_TIME, 'cyan')
 
-	remote_flag = -1
+	choice = -1
 
-	while remote_flag < 0 or remote_flag > 1:
-		remote_flag = int(raw_input("Local (0) or Remote (1) attack? "))
+	while choice != 0:
+		choice = raw_input("Choose:\n1) launch Remote False Adjacency attack\n2) mininet CLI\n0) exit\n> ")
 
-	#"""
-	if remote_flag == 0:
-		launch_attack(remote_flag, local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
-	else:
-		launch_attack(remote_flag, remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
-	#"""
-	
-	log2('Collecting data', CAPTURING_WINDOW, 'cyan')
-	
-	#CLI(net)
-	#raw_input('press ENTER to stop mininet...')
+		if choice != '':
+			choice = int(choice)
+
+			if choice == 1:
+				#remote_flag = -1
+				#while remote_flag < 0 or remote_flag > 1:
+				#	remote_flag = int(raw_input("Local (0) or Remote (1) attack? "))
+				remote_flag = 1
+
+				#"""
+				if remote_flag == 0:
+					launch_attack(remote_flag, local_attacker_host, local_atk1_mac_address, r1_eth1_mac_address)
+				else:
+					launch_attack(remote_flag, remote_attacker_host, local_atk1_mac_address, r3_eth2_mac_address)
+				#"""
+				log2('Collecting data', CAPTURING_WINDOW, 'cyan')
+
+				choice = 0
+
+			elif choice == 2:
+				CLI(net)
 
 	net.stop()
 
@@ -311,12 +324,15 @@ def main():
 	os.system('pgrep pox | xargs kill -9')
 	os.system('pgrep -f webserver.py | xargs kill -9')
 
-	os.system('sudo wireshark /tmp/R2-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
+	os.system('sudo wireshark /tmp/R1-eth1-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
+	os.system('sudo wireshark /tmp/R1-eth2-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 
+	"""
 	if remote_flag == 0:
 		os.system('sudo wireshark /tmp/latk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
 	else:
 		os.system('sudo wireshark /tmp/ratk-tcpdump.cap -Y \'not ipv6\' 2>/dev/null &')
+	#"""
 
 
 if __name__ == "__main__":

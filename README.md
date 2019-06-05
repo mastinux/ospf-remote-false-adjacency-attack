@@ -72,9 +72,9 @@ NB: l'attaccante non riceve mai i messaggi di risposta dal router vittima
 Avviare la topologia  
 	`# python ospf.py`
 
-Attendere la convergenza di OSPF in base alle indicazioni.
+Attendere la convergenza di OSPF.
 
-Scegliere se lanciare l'attacco locale (`0`) o remoto (`1`).
+Scegliere di eseguire l'attacco con l'opzione `1`.
 
 Attendere che vengano raccolti i pacchetti interessanti per l'attacco.
 
